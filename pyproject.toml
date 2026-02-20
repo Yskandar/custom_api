@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel"]  # Build dependencies
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "custom_api"  # Replace with your project name
+version = "0.1.0"    # Replace with your version
+description = "A simple FastAPI project with validation and security features."
+authors = [
+    { name = "Yskandar", email = "yskandar.gas@gmail.com" }
+]
+license = "MIT"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pre-commit",
+    "python-dotenv",
+]
