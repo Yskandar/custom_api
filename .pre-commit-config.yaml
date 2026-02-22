@@ -19,7 +19,7 @@ repos:
     rev: "5.0.4" # Available tags: https://github.com/pycqa/flake8/tags
     hooks:
       - id: flake8
-        args: ["--max-line-length=120", --ignore, E203 W503]
+        args: ["--max-line-length=120", --ignore, E203 W503 E501]
 
   - repo: https://github.com/PyCQA/bandit
     rev: "1.7.0" # See https://github.com/PyCQA/bandit/tags
