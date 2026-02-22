@@ -16,4 +16,8 @@ dependencies = [
     "pydantic",
     "pre-commit",
     "python-dotenv",
+    "langchain-openai"
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
