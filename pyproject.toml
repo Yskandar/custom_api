@@ -11,7 +11,7 @@ authors = [
 ]
 license = "MIT"
 dependencies = [
-    "fastapi",
+    "fastapi[standard]",
     "uvicorn",
     "pydantic",
     "pre-commit",
