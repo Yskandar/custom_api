@@ -1,4 +1,5 @@
-from typing import Literal
+import threading
+from typing import Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -29,6 +30,7 @@ class Task(BaseModel):
     task_name: Literal["summary", "sentiment"] = Field(
         "summary", description="The selected task"
     )
+    result: str = None
 
 
 class TextProcessor:
@@ -53,28 +55,50 @@ class TextProcessor:
         """
 
         if task.task_name == "sentiment":
-            return self.sentiment_analyzis(task.text.content)
+            method = self.sentiment_analyzis
         elif task.task_name == "summary":
-            return self.text_summary(task.text.content)
+            method = self.text_summary
+
         else:
             raise NotImplementedError(
                 "Only the summary and sentiment tasks are supported"
             )
 
-    def sentiment_analyzis(self, text: str):
+        thread = threading.Thread(target=method, kwargs={"text": task})
+
+        thread.start()
+        thread.join(timeout=10)
+        if thread.is_alive():
+            task.result = "TIMEOUT"
+
+    def sentiment_analyzis(self, text: Union[Task, str]):
         """
         Requests the LLM Client for a sentiment analyzis of the given text.
         """
 
-        return self.llm.generate_response(
-            message=text, system_prompt=self.sentiment_prompt
-        )
+        if isinstance(text, Task):
+            text.result = self.llm.generate_response(
+                message=text.text.content, system_prompt=self.sentiment_prompt
+            )
 
-    def text_summary(self, text: str):
+        else:
+
+            return self.llm.generate_response(
+                message=text, system_prompt=self.sentiment_prompt
+            )
+
+    def text_summary(self, text: Union[Task, str]):
         """
         Requests the LLM Client for a summary of the given text.
         """
 
-        return self.llm.generate_response(
-            message=text, system_prompt=self.summarize_prompt
-        )
+        if isinstance(text, Task):
+            text.result = self.llm.generate_response(
+                message=text.text.content, system_prompt=self.summarize_prompt
+            )
+
+        else:
+
+            return self.llm.generate_response(
+                message=text, system_prompt=self.summarize_prompt
+            )

@@ -17,7 +17,14 @@ def root():
 
 @app.post("/text_processing/")
 def perform_task(task: Task):
-    return processor.perform_task(task)
+    processor.perform_task(task)
+
+    if task.result is None:
+        return "Something wrong happened"
+    elif task.result == "TIMEOUT":
+        return "Timeout exceeded, LLM server is most probably busy. Try again later."
+    else:
+        return task.result
 
 
 @app.get("/text_processing/summarize/{text}")
