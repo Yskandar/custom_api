@@ -5,12 +5,17 @@ if __name__ == "__main__":
     example_path = "research/examples/example_text.md"
 
     with open(example_path, encoding="utf-8") as f:
-        query = f.read()
+        text = f.read()
 
-    query_url = f"http://127.0.0.1:8000/text_processing/summarize/{query}"
+    request_body = {
+        "text": {"text_name": "Tech News", "content": f"{text}"},
+        "task_name": "summary",
+    }
+
+    query_url = "http://127.0.0.1:8000/text_processing"
 
     print("Sending API request...")
-    content = requests.get(query_url).content.decode("utf-8")
+    content = requests.post(query_url, json=request_body).content.decode("utf-8")
 
     print("Here is the API response: ")
     print(content)
