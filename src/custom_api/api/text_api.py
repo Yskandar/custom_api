@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from src.custom_api.core.text_processor import TextProcessor
+from src.custom_api.core.text_processor import Task, TextProcessor
 from src.custom_api.utils.tools import get_default_llm_config
 
 app = FastAPI()
@@ -13,6 +13,11 @@ def root():
     return {
         "message": "This API allows you to perform summarization or sentiment analyzis on a text."
     }
+
+
+@app.post("/text_processing/")
+def perform_task(task: Task):
+    return processor.perform_task(task)
 
 
 @app.get("/text_processing/summarize/{text}")
