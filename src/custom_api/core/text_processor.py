@@ -12,7 +12,12 @@ class Text(BaseModel):
     """
 
     text_name: str = Field("default", description="the name of the text")
-    content: str = Field(description="the content of the text")
+    content: str = Field(
+        description="the content of the text",
+        min_length=50,
+        max_length=5000,
+        pattern=r"^[^@#$]*$",
+    )
 
 
 class Task(BaseModel):
