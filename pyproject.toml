@@ -12,6 +12,8 @@ authors = [
 license = "MIT"
 dependencies = [
     "fastapi[standard]",
+    "pyjwt[crypto]",
+    "pwdlib[argon2]",
     "uvicorn",
     "pydantic",
     "pre-commit",
