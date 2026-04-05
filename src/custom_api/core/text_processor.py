@@ -1,4 +1,5 @@
 import threading
+from datetime import datetime, timedelta
 from typing import Literal, Union
 
 from pydantic import BaseModel, Field
@@ -31,6 +32,24 @@ class Task(BaseModel):
         "summary", description="The selected task"
     )
     result: str = None
+
+    def full_dump(
+        self,
+    ):
+        res = {"task_name": self.task_name, "result": self.result}
+        res.update(self.text.model_dump())
+
+        return res
+
+
+class TreatedRequest(BaseModel):
+    """
+    Describes the treated request
+    """
+
+    treated_task: Task
+    reception_timestamp: datetime
+    process_time: timedelta
 
 
 class TextProcessor:
