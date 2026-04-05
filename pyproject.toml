@@ -18,7 +18,8 @@ dependencies = [
     "pydantic",
     "pre-commit",
     "python-dotenv",
-    "langchain-openai"
+    "langchain-openai",
+    "pandas",
 ]
 
 [tool.setuptools.packages.find]
