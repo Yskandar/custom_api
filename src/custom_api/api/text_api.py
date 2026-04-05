@@ -8,8 +8,15 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 
-from src.custom_api.api.users import User, load_user_db, update_user_db
-from src.custom_api.core.text_processor import Task, TextProcessor
+from src.custom_api.api.users import (
+    User,
+    UserRequests,
+    load_user_db,
+    load_users_requests_db,
+    update_user_db,
+    update_users_requests_db,
+)
+from src.custom_api.core.text_processor import Task, TextProcessor, TreatedRequest
 from src.custom_api.utils.tools import get_default_llm_config, initialize_environment
 
 # Setup environment and retrieve important environment variables
@@ -17,7 +24,9 @@ initialize_environment()
 SECRET_KEY = os.environ.get("SECRET_KEY")
 ALGORITHM = os.environ.get("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES"))
+MAX_REQ_PER_MIN = 5
 USER_DB = load_user_db()
+USERS_REQUESTS_DB = load_users_requests_db()
 
 assert SECRET_KEY, "SECRET_KEY variable missing from constants.env"
 assert ALGORITHM, "ALGORITHM variable missing from constants.env"
@@ -100,7 +109,13 @@ def hash_user_password(userpassword: str):
 
 
 def get_user(username: str):
-    return User.model_validate_json(USER_DB.get(username))
+    if USER_DB.get(username):
+        return User.model_validate_json(USER_DB.get(username))
+
+
+def get_user_requests(username: str):
+    if USERS_REQUESTS_DB.get(username):
+        return UserRequests.model_validate_json(USERS_REQUESTS_DB.get(username))
 
 
 def create_user(username: str, userpassword: str):
@@ -132,6 +147,26 @@ def authenticate_user(username: str, userpassword: str):
         return user
     else:
         raise HTTPException(status_code=401, detail="Wrond username or password")
+
+
+def register_user_request(user: User, treated_request: TreatedRequest):
+    """
+    Register the treated request in the users_requests_db & update the database
+    """
+
+    global USERS_REQUESTS_DB
+    user_requests = get_user_requests(user.username)
+    if user_requests is None:
+        USERS_REQUESTS_DB[user.username] = UserRequests.create_new_user_requests(
+            user=user, tr=treated_request
+        ).model_dump_json()
+    else:
+        user_requests.add_new_request(treated_request)
+        USERS_REQUESTS_DB[user.username] = user_requests.model_dump_json()
+
+    # Update the database accordingly
+    update_users_requests_db(USERS_REQUESTS_DB)
+    USERS_REQUESTS_DB = load_users_requests_db()
 
 
 @app.get("/")
@@ -168,7 +203,20 @@ def get_current_user(current_user: Annotated[User, Depends(identify_user)]):
 def perform_task(
     task: Task, current_user: Annotated[User, Depends(identify_user)]
 ) -> Task:
+
+    # If user exists in the database, apply max request rate
+    user_requests = get_user_requests(current_user.username)
+    if user_requests is not None and not user_requests.is_request_allowed(
+        max_req_per_min=MAX_REQ_PER_MIN
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="You are exceeding the max request rate. Try again later.",
+        )
+
+    reception_time = datetime.now()
     processor.perform_task(task)
+    process_time = datetime.now() - reception_time
 
     if task.result is None:
         task.result = "Something wrong happened. Please try again later."
@@ -178,14 +226,14 @@ def perform_task(
             "Timeout exceeded, LLM server is most probably busy. Try again later."
         )
 
+    else:
+        tr = TreatedRequest(
+            treated_task=task,
+            reception_timestamp=reception_time,
+            process_time=process_time,
+        )
+
+        # Register user request
+        register_user_request(user=current_user, treated_request=tr)
+
     return task
-
-
-@app.get("/text_processing/summarize/{text}")
-def summarize_text(text: str, current_user: Annotated[User, Depends(identify_user)]):
-    return processor.text_summary(text=text)
-
-
-@app.get("/text_processing/analyze/{text}")
-def analyze_text(text: str, current_user: Annotated[User, Depends(identify_user)]):
-    return processor.sentiment_analyzis(text=text)
