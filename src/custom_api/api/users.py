@@ -6,7 +6,8 @@ from typing import List
 from pandas import DataFrame, to_datetime, to_timedelta
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
-from custom_api.core.text_processor import TreatedRequest
+from custom_api.api.tasks import TreatedRequest
+from custom_api.utils.tools import initialize_json
 
 
 class User(BaseModel):
@@ -98,11 +99,6 @@ class UserRequests(BaseModel):
 current_dir = Path(__file__).parent
 JSON_PATH_USERS = current_dir / "users.json"
 JSON_PATH_USERS_REQUESTS = current_dir / "users_requests.json"
-
-
-def initialize_json(json_path):
-    with open(json_path, "x") as f:
-        json.dump({}, f)
 
 
 def load_user_db() -> dict:
