@@ -3,3 +3,4 @@ constants.env
 src/custom_api.egg-info/
 build
 *.pyc
+*.json
