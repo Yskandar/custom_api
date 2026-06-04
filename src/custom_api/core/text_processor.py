@@ -1,60 +1,14 @@
 import threading
-from datetime import datetime, timedelta
-from typing import Literal, Union
+from typing import Union
 
-from pydantic import BaseModel, Field
-
+from custom_api.api.tasks import Task
 from custom_api.core.llm_handler import LangchainLLMHandler
 from custom_api.utils.prompts import SENTIMENT_PROMPT, SUMMARIZE_PROMPT
 
 
-class Text(BaseModel):
-    """
-    Describes the text model
-    """
-
-    text_name: str = Field("default", description="the name of the text")
-    content: str = Field(
-        description="the content of the text",
-        min_length=50,
-        max_length=5000,
-        pattern=r"^[^@#$]*$",
-    )
-
-
-class Task(BaseModel):
-    """
-    Task: the basetask + the text to process
-    """
-
-    text: Text = Field(description="the text object to process")
-    task_name: Literal["summary", "sentiment"] = Field(
-        "summary", description="The selected task"
-    )
-    result: str = None
-
-    def full_dump(
-        self,
-    ):
-        res = {"task_name": self.task_name, "result": self.result}
-        res.update(self.text.model_dump())
-
-        return res
-
-
-class TreatedRequest(BaseModel):
-    """
-    Describes the treated request
-    """
-
-    treated_task: Task
-    reception_timestamp: datetime
-    process_time: timedelta
-
-
 class TextProcessor:
     """
-    This class creates helper function to adjust score the sentiment or resume a text.
+    This class creates helper function to score the sentiment or resume a text.
     """
 
     def __init__(

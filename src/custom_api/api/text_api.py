@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -8,6 +9,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
 
+from custom_api.api.tasks import Task, TaskRecord, TaskStatus, TreatedRequest
+from src.custom_api.api.task_store import GLOBAL_TASKSTORE
 from src.custom_api.api.users import (
     User,
     UserRequests,
@@ -16,7 +19,7 @@ from src.custom_api.api.users import (
     update_user_db,
     update_users_requests_db,
 )
-from src.custom_api.core.text_processor import Task, TextProcessor, TreatedRequest
+from src.custom_api.core.text_processor import TextProcessor
 from src.custom_api.utils.tools import get_default_llm_config, initialize_environment
 
 # Setup environment and retrieve important environment variables
@@ -169,6 +172,54 @@ def register_user_request(user: User, treated_request: TreatedRequest):
     USERS_REQUESTS_DB = load_users_requests_db()
 
 
+async def send_task_to_processor(task_id: str, current_user: User):
+
+    # Retrieve task using ID
+    task_record = GLOBAL_TASKSTORE.records.get(task_id)
+    if not task_record:
+        raise ValueError(f"No task found with id {task_id}")
+    task = task_record.task
+
+    # Set task status to PROCESSING
+    task_record.status = TaskStatus.PROCESSING
+
+    # Send task to processor
+    loop = asyncio.get_event_loop()
+    reception_time = task_record.created_at
+    await loop.run_in_executor(None, processor.perform_task, task)
+    completion_time = datetime.now()
+    process_time = completion_time - reception_time
+
+    if task.result is None:
+        task.result = "Something wrong happened. Please try again later."
+        task_record.status = TaskStatus.FAILED
+
+    elif task.result == "TIMEOUT":
+        task.result = (
+            "Timeout exceeded, LLM server is most probably busy. Try again later."
+        )
+        task_record.status = TaskStatus.FAILED
+
+    else:
+        tr = TreatedRequest(
+            treated_task=task,
+            reception_timestamp=reception_time,
+            process_time=process_time,
+        )
+
+        task_record.status = TaskStatus.COMPLETED
+        task_record.completed_at = completion_time
+
+        # Register user request
+        register_user_request(user=current_user, treated_request=tr)
+
+    # Update task record with correct task
+    task_record.task = task
+
+    # Update task store
+    GLOBAL_TASKSTORE.set_record(task_id=task_id, task_record=task_record)
+
+
 @app.get("/")
 def root():
     return {
@@ -199,10 +250,13 @@ def get_current_user(current_user: Annotated[User, Depends(identify_user)]):
     return current_user
 
 
-@app.post("/text_processing/")
-def perform_task(
+@app.post("/tasks")
+async def process_task(
     task: Task, current_user: Annotated[User, Depends(identify_user)]
-) -> Task:
+):
+    """
+    Logs the sent task and sends it to the text processor
+    """
 
     # If user exists in the database, apply max request rate
     user_requests = get_user_requests(current_user.username)
@@ -214,26 +268,47 @@ def perform_task(
             detail="You are exceeding the max request rate. Try again later.",
         )
 
-    reception_time = datetime.now()
-    processor.perform_task(task)
-    process_time = datetime.now() - reception_time
+    # Generate task UUID
+    creation_time = datetime.now()
+    task_id = task.task_name + "_" + str(creation_time) + task.text.content[:5]
 
-    if task.result is None:
-        task.result = "Something wrong happened. Please try again later."
+    # Create TaskRecord
+    tr = TaskRecord(
+        task_id=task_id,
+        status=TaskStatus.PENDING,
+        task=task,
+        created_at=creation_time,
+        username=current_user.username,
+    )
 
-    elif task.result == "TIMEOUT":
-        task.result = (
-            "Timeout exceeded, LLM server is most probably busy. Try again later."
+    # Add Task to Task Store
+    GLOBAL_TASKSTORE.set_record(task_id=task_id, task_record=tr)
+
+    # Send async request to processor
+    background_task = asyncio.create_task(send_task_to_processor(task_id, current_user))
+    GLOBAL_TASKSTORE.add_reference(background_task)
+
+    # Return the task_id
+    return {"task_id": task_id}
+
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: str, current_user: Annotated[User, Depends(identify_user)]):
+
+    # Get taskrecord
+    tr = GLOBAL_TASKSTORE.records.get(task_id)
+
+    if not tr:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No task record found for id {task_id}",
+        )
+
+    if current_user.username != tr.username:
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have access to the given task record",
         )
 
     else:
-        tr = TreatedRequest(
-            treated_task=task,
-            reception_timestamp=reception_time,
-            process_time=process_time,
-        )
-
-        # Register user request
-        register_user_request(user=current_user, treated_request=tr)
-
-    return task
+        return tr
