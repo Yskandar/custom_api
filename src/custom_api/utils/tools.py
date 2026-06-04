@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -27,3 +28,8 @@ def get_default_llm_config():
     }
 
     return config
+
+
+def initialize_json(json_path):
+    with open(json_path, "x") as f:
+        json.dump({}, f)
